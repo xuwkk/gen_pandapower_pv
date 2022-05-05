@@ -73,8 +73,7 @@ sgen = net.sgen
 ext_grid = net.ext_grid
 
 # save net
-pp.to_pickle(net, "bus33bm.p") 
-plotting.to_html(net,filename='bus33bm.html', show_tables=(False))
+pp.to_pickle(net, "bus33bw.p") 
+plotting.to_html(net,filename='bus33bw.html', show_tables=(False))
 
 
-# %%
