@@ -16,7 +16,7 @@ elif args.bus == 'bus141':
 elif args.bus == 'bus322':
     net = pp.from_pickle(f'bus322.p')
 
-print(net)
+print(net.load.shape[0])
 try:
     pp.runpp(net, max_iteration = 30)
     print('Converged!')
