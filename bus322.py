@@ -67,11 +67,11 @@ net.load = net.load.drop(remove_load_index)
 net.load.reset_index(drop = True, inplace = True) # reset index after dropping
 
 # Randomly drop some loads
-random_remove_load = random.sample(range(net.load.shape[0]), round(net.load.shape[0]/1.3))
-random_remove_load.sort()
-net.load = net.load.drop(random_remove_load)
-net.load.reset_index(drop = True, inplace = True)
-net.load
+# random_remove_load = random.sample(range(net.load.shape[0]), round(net.load.shape[0]/1.3))
+# random_remove_load.sort()
+# net.load = net.load.drop(random_remove_load)
+# net.load.reset_index(drop = True, inplace = True)
+# net.load
 
 new_bus = net.bus
 new_ext_grid = net.ext_grid
