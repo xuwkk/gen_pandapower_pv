@@ -6,10 +6,10 @@ The network contains a main branch which is built by myself. However the loads a
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import pandapower as pp
 import simbench as sb
 import random
+from copy import deepcopy
 
 print(f'pandas version: {pd.__version__}')
 print(f'pandapower version: {pp.__version__}')
@@ -19,17 +19,17 @@ random.seed(1)
 np.random.seed(2)
 
 # Empty net: create an empty network
-net = pp.create_empty_network() 
+net = pp.create_empty_network()
 
 # External bus: external bus at bus index 0
-pp.create_bus(net, vn_kv=110, type='n',name = 'ext_grid', zone = 'main', max_vm_pu = 1.05, min_vm_pu = 0.95) 
+pp.create_bus(net, vn_kv=110, type='n',name = 'ext_grid', zone = 'main', max_vm_pu = 1.05, min_vm_pu = 0.95)
 
 # Main bus: the total number of MV bus
 no_bus_MV = 25
 
 # Generate the MV bus
 for i in range(no_bus_MV):
-    pp.create_bus(net, vn_kv=20, type='n',name = 'MV bus', zone = 'main', max_vm_pu = 1.05, min_vm_pu = 0.95)
+    pp.create_bus(net, vn_kv=20, type='n', name = 'MV bus', zone = 'main', max_vm_pu = 1.05, min_vm_pu = 0.95)
 
 # External grid: 110kv
 pp.create_ext_grid(net, 0, vm_pu=1.00, va_degree = 0, in_service = True, name = 'ext_grid')
@@ -40,9 +40,9 @@ pp.create_transformer(net,0,1, name="110kV/20kV transformer", std_type="63 MVA 1
 # Lines: mv, randomly generate two types of line specification with random lengths
 for i in range(1,no_bus_MV):
     if i%2 == 0:
-        pp.create_line(net, i, i+1, length_km = 0.3+random.random(), std_type="NA2XS2Y 1x70 RM/25 12/20 kV", name = 'MV_line')
+        pp.create_line(net, i, i+1, length_km = 0.4+random.random(), std_type="NA2XS2Y 1x70 RM/25 12/20 kV", name = 'MV_line')
     else:
-        pp.create_line(net, i, i+1, length_km = 2+2*random.random(), std_type='70-AL1/11-ST1A 20.0', name = 'MV_line')
+        pp.create_line(net, i, i+1, length_km = 3+2*random.random(), std_type='70-AL1/11-ST1A 20.0', name = 'MV_line')
 
 # Using the loads in MV_net for the grid
 MV_list = ['1-MV-rural--0-sw','1-MV-semiurb--0-sw','1-MV-urban--0-sw','1-MV-comm--0-sw']
@@ -85,35 +85,36 @@ print(f"the total load of MV is {new_load['p_mw'].sum()}")
 # Append the LV buses
 print('The low-voltage nets:')
 for i in range(6):
-    LV_net = pp.from_pickle(f'lv_network/LV{i}.p')
+    LV_net = pp.from_pickle(f'LV_network/LV{i}.p')
     print(f'LV{i} bus No: {LV_net.bus.shape[0]}')
 
 LV_index = [2,4,5]
 
 # Append the low-voltage network on the main branch
 for i in range(len(LV_index)):
+# for i in range(1):  
     print(i)
     # update cumulation: we should add on the index
-    cum_bus_index = net.bus.shape[0]     # cumulative bus index after MV and LVs
-    cum_line_index = net.line.shape[0]   # cumulative line index after MV and LVs
-    cum_sgen_index = net.sgen.shape[0]   # cumulative sgen index after MV and LVs
+    cum_bus_index = net.bus.shape[0]    # cumulative bus index after MV and LVs
+    cum_line_index = net.line.shape[0]  # cumulative line index after MV and LVs
+    cum_sgen_index = net.sgen.shape[0]  # cumulative sgen index after MV and LVs
     cum_load_index = net.load.shape[0]
     cum_zone_index = len(set(new_bus['zone'].values)) - 1
     
     # LV summary
-    LV_net = pp.from_pickle(f'lv_network/LV{LV_index[i]}.p')
+    LV_net = pp.from_pickle(f'LV_network/LV{LV_index[i]}.p')
     print(f'LV{i} bus No: {LV_net.bus.shape[0]}')
     
+    # pp.plotting.to_html(LV_net, filename='LV.html', show_tables=(False))
     LV_bus = LV_net.bus
     LV_load = LV_net.load
-    
     LV_line = LV_net.line
     LV_ext_grid = LV_net.ext_grid
     LV_trafo = LV_net.trafo
     LV_sgen = LV_net.sgen
     
     append_bus = LV_bus.copy(deep = True)
-    # reset the bus index
+    # reset the bus index on the cumulation index
     append_bus.set_index(pd.Index(list(range(cum_bus_index,cum_bus_index + append_bus.shape[0]))), inplace = True) # reset the bus index
     
     append_bus['name'] = 'LV bus'
@@ -123,46 +124,50 @@ for i in range(len(LV_index)):
     append_bus['min_vm_pu'] = 0.95
     append_bus['max_vm_pu'] = 1.05
     
-    # drop the higher voltage bus
+    # drop the higher voltage side of transformer
     append_bus.drop(append_bus[append_bus['vn_kv'] == 20].index, inplace = True)
     
-    # change zone
+    ## change zone
     for j in range(append_bus.shape[0]):
         if append_bus['zone'].iloc[j] != 'main':
+            # cumulate the zone index
             append_bus['zone'].iloc[j] = f"zone{int(append_bus['zone'].iloc[j][-1]) + cum_zone_index}"
     
     # concate the LV bus to the net.bus
     net.bus = net.bus.append(append_bus[['name','vn_kv', 'type', 'zone', 'in_service', 'min_vm_pu', 'max_vm_pu']]) # concat the bus
     new_bus = net.bus
     
-    pp.create_transformer(net,ccp[i], LV_trafo['lv_bus'].values[0] + cum_bus_index, name="20kV/0.4kV transformer", std_type="0.63 MVA 20/0.4 kV")
+    pp.create_transformer(net,ccp[i], LV_trafo['lv_bus'].values[0] + cum_bus_index, name="20kV/0.4kV transformer", std_type="0.4 MVA 20/0.4 kV")
+    # increase the transformer rated power to cope the large PV penetration
+    net['trafo']['sn_mva'].iloc[-1] = 5
     new_trafo = net.trafo
     
     append_line = LV_line.copy(deep = True)
-    append_line['from_bus'] = append_line['from_bus']+cum_bus_index # change connection
-    append_line['to_bus'] = append_line['to_bus']+cum_bus_index
+    append_line['from_bus'] = append_line['from_bus'] + cum_bus_index # change connection
+    append_line['to_bus'] = append_line['to_bus'] + cum_bus_index
     append_line['name'] = 'LV_line'
+    # test if the line resistance and reactance is close to 0
+    # this is one of the test in the pp.diagonose
     
-    rand_ratio = 1.2+0.3*np.random.rand(append_line.shape[0],)
-    append_line['length_km'] = append_line['length_km']*rand_ratio
+    # rand_ratio = 1.2+0.3*np.random.rand(append_line.shape[0],)
+    # append_line['length_km'] = append_line['length_km']*rand_ratio
     
     for j in range(append_line.shape[0]):
         # slightly varying the length
-        
+
         if append_line['length_km'].iloc[j]*append_line['r_ohm_per_km'].iloc[j] < 0.001 or append_line['length_km'].iloc[j]*append_line['x_ohm_per_km'].iloc[j] < 0.001:
             km_r = append_line['length_km'].iloc[j] = 0.002/append_line['r_ohm_per_km'].iloc[j]
             km_x = append_line['length_km'].iloc[j] = 0.002/append_line['x_ohm_per_km'].iloc[j]
-            append_line.at[j,'length_km'] = np.max([km_r,km_x]) # assign the length to the smaller one
+            append_line.at[j,'length_km'] = np.max([km_r,km_x]) # assign the length to the larger one
     
     append_line.set_index(pd.Index(list(range(cum_line_index, cum_line_index + append_line.shape[0]))), inplace = True)
     
     net.line = net.line.append(append_line)
     new_line = net.line
-    
 
     append_load = LV_load.copy(deep=True)
     append_load.set_index(pd.Index(list(range(cum_load_index, cum_load_index + append_load.shape[0]))), inplace = True)
-    append_load['bus'] = append_load['bus']+cum_bus_index
+    append_load['bus'] = append_load['bus'] + cum_bus_index
     append_load['name'] = 'LV_load'
     net.load = net.load.append(append_load[net.load.columns])
     net.load['sn_mva'] = np.nan
@@ -172,6 +177,7 @@ for i in range(len(LV_index)):
     append_sgen = LV_sgen.copy(deep=True)
     append_sgen.set_index(pd.Index(list(range(cum_sgen_index, cum_sgen_index + append_sgen.shape[0]))), inplace = True) # reset the sgen index
     append_sgen['bus'] = append_sgen['bus'] + cum_bus_index
+    # append_sgen['name'] = f'zone{i}'
     
     # change zone
     for j in range(append_sgen.shape[0]):
@@ -190,11 +196,48 @@ for i in range(len(LV_index)):
     print(f'the bus number is {net.bus.shape[0]}')
     print(f'the load number is {net.load.shape[0]}')
     print(f"the total load is {net.load['p_mw'].values.sum()}")
-    
+
+# Combine all the loads at a bus    
+load_list = list(set(new_load['bus']))
+load_no = len(load_list)
+net.load = deepcopy(new_load.iloc[:load_no])
+net.load['bus'] = load_list # the bus index of the load is monotonically increasing
+net.load['p_mw'] = 0
+net.load['q_mvar'] = 0
+
+for i in range(load_no):
+    for j in range(new_load.shape[0]):
+        if net.load['bus'].iloc[i] == new_load['bus'].iloc[j]:
+            net.load['p_mw'].iloc[i] = net.load['p_mw'].iloc[i] + new_load['p_mw'].iloc[j]
+            net.load['q_mvar'].iloc[i] = net.load['q_mvar'].iloc[i] + new_load['q_mvar'].iloc[j]
+
+# Clean the grid pd
+net.ext_grid['max_p_mw'] = 1000
+net.ext_grid['min_p_mw'] = -1000
+net.ext_grid['max_q_mvar'] = 1000
+net.ext_grid['min_q_mvar'] = -1000
+net.load = net.load[['name','bus','p_mw','q_mvar','const_z_percent','const_i_percent','scaling','in_service','type']]
+net.load['controllable'] = False # the load is not controllable
+net.sgen = net.sgen[['name','bus','p_mw','q_mvar','scaling','max_p_mw','min_p_mw','max_q_mvar','min_q_mvar','in_service']]
+net.sgen['controllable'] = True
+
+# poly cost for sgen and ext_grid
+# assume the costs are the same, so we are actually minimizing the power loss
+pp.create_poly_cost(net, 0, 'ext_grid', 1)
+for i in range(net.sgen.shape[0]):
+    pp.create_poly_cost(net, i, 'sgen', 1)
+
+new_bus = net.bus
+new_load = net.load
+new_line = net.line
+new_trafo = net.trafo
+new_ext_grid = net.ext_grid
+new_sgen = net.sgen
 
 # Check connection
 pp.to_pickle(net, filename = f'bus322.p')
 pp.plotting.to_html(net, filename='bus322.html', show_tables=(False))
+pp.runpp(net)
 
 new_bus = net.bus
 new_load = net.load

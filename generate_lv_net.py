@@ -166,7 +166,7 @@ if __name__ == "__main__":
         LV_trafo = LV_net.trafo
         LV_sgen = LV_net.sgen
         print(f'number of trafo in LV{LV_index} is {LV_trafo.shape[0]}')
-        simple_plotly(LV_net)
+        # simple_plotly(LV_net)
 
         bus_initial, high_bus_index, ext_bus_index = determine_initial_bus(LV_trafo, LV_line)
         leaf_bus, incidence_matrix = determine_leaf_bus(LV_bus, LV_line)
